@@ -1,15 +1,15 @@
-INDEX,STRING,ALIAS
-1,kubernetes usage,usage
-2,kubernetes challenges,challenges
-3,kubernetes flaws,flaws
-4,kubernetes security,security
-5,kubernetes benefits,benefits
-6,kubernetes production,production
-7,kubernetes learned,learned
-8,kubernetes use cases,use-cases
-9,kubernetes deployment challenges,deployment-challenges
-10,kubernetes security challenges,security-challenges
-11,kubernetes adoption challenges,adoption-challenges
-12,kubernetes lesson learned,lesson-learned
-13,kubernetes tradeoff,tradeoff
-14,kubernetes in cloud,in-cloud
+INDEX,STRING
+1,kubernetes usage
+2,kubernetes challenges
+3,kubernetes flaws
+4,kubernetes security
+5,kubernetes benefits
+6,kubernetes production
+7,kubernetes learned
+8,kubernetes use cases
+9,kubernetes deployment challenges
+10,kubernetes security challenges
+11,kubernetes adoption challenges
+12,kubernetes lesson learned
+13,kubernetes tradeoff
+14,kubernetes in cloud

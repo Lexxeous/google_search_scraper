@@ -4,6 +4,7 @@
 
 import re
 import sys
+import pandas as pd
 import urllib.parse
 import urllib.request
 
@@ -18,6 +19,9 @@ except ImportError:
 DATE_THRESHOLD = 2010
 INPUT_FILE = "search_strings.csv"
 OUTPUT_FILE = "scraper_results.csv"
+ALIAS_CHOP = 11 # if all search strings begin with the same prefixed word, can chop it off for alias naming
+NUM_RESULTS = 100
+SEARCH_TIMEOUT = 5
 
 # ––––––––––––––––––––––––––––––––––––––––––––––– PROTOTYPED FUNCTIONS –––––––––––––––––––––––––––––––––––––––––––––– #
 
@@ -56,12 +60,13 @@ def main():
 	cli_bools = ["True", "False"]
 
 	temp = sys.argv[1]
-	search = sys.argv[2]
+	multi = sys.argv[2]
 	dupe = sys.argv[3]
 	date = sys.argv[4]
-	verbose = int(sys.argv[5])
+	lang = sys.argv[5]
+	verbose = int(sys.argv[6])
 
-	if(temp not in cli_bools or search not in cli_bools or dupe not in cli_bools or date not in cli_bools):
+	if(temp not in cli_bools or multi not in cli_bools or dupe not in cli_bools or date not in cli_bools or lang not in cli_bools):
 		print("ERROR 1639: Invalid command line argument booleans.")
 		sys.exit(1)
 
@@ -70,30 +75,17 @@ def main():
 		sys.exit(1)
 
 	temp = False if temp == "False" else True
-	search = False if search == "False" else True
+	multi = False if multi == "False" else True
 	dupe = False if dupe == "False" else True
 	date = False if date == "False" else True
+	lang = False if lang == "False" else True
 
 	# ––––––––––––––––––––––––––––––––––––––––––––––––– SEARCH STRINGS –––––––––––––––––––––––––––––––––––––––––––––––––– #
 	 
-	# TODO: READ IN THE SEARCH STRING QUERY DATA FROM THE CSV FILE INSTEAD OF STRICTLY DEFINING IT HERE, WILL MAKE IT MORE GENERAL
-
-	queries = [
-							"kubernetes usage",
-							"kubernetes challenges",
-							"kubernetes flaws",
-							"kubernetes security",
-							"kubernetes benefits",
-							"kubernetes production",
-							"kubernetes learned",
-							"kubernetes use cases",
-							"kubernetes deployment challenges",
-							"kubernetes security challenges",
-							"kubernetes adoption challenges",
-							"kubernetes lesson learned",
-							"kubernetes tradeoff",
-							"kubernetes in cloud"
-						]
+	queries = []
+	q_df = pd.read_csv("search_strings.csv")
+	for index, row in q_df.iterrows():
+		queries.append(row["STRING"])
 
 	# –––––––––––––––––––––––––––––––––––––––––––––––– INDIVIDUAL SEARCH –––––––––––––––––––––––––––––––––––––––––––––––– #
 
@@ -101,7 +93,7 @@ def main():
 	if(temp):
 		if(verbose >= 1): print("\nPerforming single search...")
 		temp_list = []
-		for j in search("SINGLE SEARCH STRING HERE", num=100, stop=100, pause=10):
+		for j in search("SINGLE SEARCH STRING HERE", num=NUM_RESULTS, stop=NUM_RESULTS, pause=SEARCH_TIMEOUT):
 			temp_list.append(j)
 		print(temp_list)
 
@@ -110,7 +102,7 @@ def main():
 
 	# ––––––––––––––––––––––––––––––––––––––––––––––––––– MULTI SEARCH ––––––––––––––––––––––––––––––––––––––––––––––––– #
 
-	if(search):
+	if(multi):
 		if(verbose >= 1): print("\nPerforming multi-search...")
 		# Create dictionary instance
 		search_dict = Dictionary()
@@ -118,17 +110,18 @@ def main():
 		# Initialize dictionary with shortened key & array with [1-based index, actual search string, empty list for URLs]
 		if(verbose >= 1): print("Initializing dictionary...")
 		for q in range(len(queries)):
-			search_dict.set_dict_entry(urlify(queries[q][11:]), [q+1, queries[q], []])
+			search_dict.set_dict_entry(urlify(queries[q][ALIAS_CHOP:]), [q+1, queries[q], []])
 
 		if(verbose >= 1): print("Populating dictionary with Google search results URLs...")
 		for q_idx in range(len(queries)):
 			results = []
-			for j in search(search_dict[urlify(queries[q_idx][11:])][1], num=100, stop=100, pause=10):
+			for j in search(search_dict[urlify(queries[q_idx][ALIAS_CHOP:])][1], num=NUM_RESULTS, stop=NUM_RESULTS, pause=SEARCH_TIMEOUT):
 				results.append(j)
-			search_dict.set_dict_entry(urlify(queries[q_idx][11:]), [q_idx+1, queries[q_idx], results])
-			print(search_dict[urlify(queries[q_idx][11:])], '\n')
+			search_dict.set_dict_entry(urlify(queries[q_idx][ALIAS_CHOP:]), [q_idx+1, queries[q_idx], results])
+			print(search_dict[urlify(queries[q_idx][ALIAS_CHOP:])], '\n')
 
-	if(not search):
+
+	if(not multi):
 		if(verbose >= 1): print("\nSkipping multi-search...")
 		# Original dictionary formed from 100 Google search results for 14 search strings
 		search_dict = {
@@ -150,7 +143,7 @@ def main():
 
 	# –––––––––––––––––––––––––––––––––––––––––––––––– REMOVE DUPLICATES ––––––––––––––––––––––––––––––––––––––––––––––– #
 
-	url_mat = [[],[],[],[],[],[],[],[],[],[],[],[],[],[]]
+	url_mat = [[]] * len(q_df.index) # dynamically sized matrix based on number of search strings in CSV
 
 	# Remove all duplicates from the original dictionary
 	if(dupe):
@@ -239,9 +232,54 @@ def main():
 	if(verbose >= 2): print(url_mat)
 	if(verbose >= 1): print_url_list_lengths(url_mat)
 
-# –––––––––––––––––––––––––––––––––––––––––––––––––– LANG FILTERING ––––––––––––––––––––––––––––––––––––––––––––––––– #
+	# –––––––––––––––––––––––––––––––––––––––––––––––––– LANG FILTERING ––––––––––––––––––––––––––––––––––––––––––––––––– #
+	if(lang):
+		if(verbose >= 1): print("\nPerforming language filtering...")
+		for i in range(len(url_mat)):
+			if(verbose >= 1): print("\nWorking on URL list #" + str(i+1) + "...")
+			new_url_list = []
+			for u in url_mat[i]:
+				try:
+					conn = urllib.request.urlopen(u, timeout=30)
+					language = conn.headers['Content-language']
+					if(language == None or language == "None"):
+						continue
+					else:
+						if(language == "en"):
+							if(verbose >= 2): print("Source is available in only English. Including", u)
+							new_url_list.append(u)
+						else:
+							if(verbose >= 2): print("Source is not available in only English. Excluding", u)
+							continue
 
-# TODO: filter based on language
+				except:
+					if(verbose >= 2): print("Failed to retrieve \'Content-language\' data. Excluding", u)
+					continue
+			url_mat[i] = new_url_list
+
+
+	# URL matrix after filtering for last-modified date after 2010 requirement
+	if(not lang):
+		if(verbose >= 1): print("\nSkipping language filtering...")
+		url_mat = [
+			['https://opensource.com/article/19/6/reasons-kubernetes', 'https://www.redhat.com/en/topics/containers/what-is-a-kubernetes-operator', 'https://www.jeffgeerling.com/blog/2019/monitoring-kubernetes-cluster-utilization-and-capacity-poor-mans-way'],
+			['https://dzone.com/articles/the-challenges-of-adopting-k8s-for-production-and', 'https://enterprisersproject.com/article/2020/5/kubernetes-managing-7-tips', 'https://diginomica.com/kubernetes-evolving-enterprise-friendly-platform-challenges-remain'],
+			['https://techbeacon.com/security/lessons-kubernetes-flaw-why-you-should-shift-your-security-upstream', 'https://security.berkeley.edu/news/kubernetes-vulnerabilities-allow-authentication-bypass-dos-cve-2019-16276', 'https://www.redhat.com/en/topics/containers/what-is-clair', 'https://opensource.com/article/18/8/tools-container-security', 'https://dzone.com/articles/kubernetes-security-best-practices'],
+			['https://techbeacon.com/enterprise-it/hackers-guide-kubernetes-security'],
+			['https://enterprisersproject.com/article/2017/10/how-explain-kubernetes-plain-english', 'https://www.rackspace.com/blog/kubernetes-explained-for-business-leaders', 'https://dzone.com/articles/kubernetes-benefits-microservices-architecture-for'],
+			['https://enterprisersproject.com/article/2018/11/kubernetes-production-4-myths-debunked', 'https://www.jeffgeerling.com/blog/2019/running-drupal-kubernetes-docker-production'],
+			['https://www.jeffgeerling.com/blog/2019/everything-i-know-about-kubernetes-i-learned-cluster-raspberry-pis', 'https://enterprisersproject.com/article/2020/2/kubernetes-6-secrets-success'],
+			['https://dzone.com/articles/how-big-companies-are-using-kubernetes', 'https://en.wikipedia.org/wiki/Kubernetes', 'https://enterprisersproject.com/article/2017/10/how-make-case-kubernetes', 'https://www.rackspace.com/solve/how-kubernetes-has-changed-face-hybrid-cloud'],
+			['https://techbeacon.com/devops/one-year-using-kubernetes-production-lessons-learned', 'https://enterprisersproject.com/article/2020/1/kubernetes-trends-watch-2020', 'https://www.jeffgeerling.com/blog/2018/kubernetes-complexity'],
+			['https://techbeacon.com/enterprise-it/4-kubernetes-security-challenges-how-address-them', 'https://enterprisersproject.com/article/2019/1/kubernetes-security-4-areas-focus', 'https://dzone.com/articles/container-and-kubernetes-security-a-2020-update', 'https://www.devopsdigest.com/the-kubernetes-security-paradox'],
+			['https://techbeacon.com/enterprise-it/top-5-container-adoption-management-challenges-it-ops', 'https://www.enterprisedb.com/blog/gartner-report-best-practices-running-containers-and-kubernetes-production', 'https://www.redhat.com/en/blog/containers-and-kubernetes-can-be-essential-hybrid-cloud-computing-strategy', 'https://enterprisersproject.com/article/2019/8/multi-cloud-statistics'],
+			['https://opensource.com/article/20/6/kubernetes-garbage-collection', 'https://enterprisersproject.com/article/2019/11/kubernetes-3-ways-get-started', 'https://www.usenix.org/biblio-3185'],
+			['https://dzone.com/articles/aws-and-kubernetes-networking-options-and-trade-of', 'https://qconlondon.com/london2020/presentation/kubernetes-not-your-platform-foundation', 'https://opensource.com/article/19/12/zen-python-trade-offs', 'https://enterprisersproject.com/article/2020/5/kubernetes-migrations-5-mistakes', 'https://www.datastax.com/blog/2012/01/your-ideal-performance-consistency-tradeoff-0', 'https://developers.redhat.com/devnation/tech-talks/kubelet-no-masters', 'https://qconnewyork.com/ny2018/presentation/cri-runtimes-deep-dive-whos-running-my-kubernetes-pod'],
+			['https://en.wikipedia.org/wiki/Kubernetes#History', 'https://en.wikipedia.org/wiki/Kubernetes#Kubernetes_Objects', 'https://en.wikipedia.org/wiki/Kubernetes#Managing_Kubernetes_objects', 'https://en.wikipedia.org/wiki/Kubernetes#Cluster_API', 'https://www.redhat.com/en/topics/containers/what-is-kubernetes', 'https://www.docker.com/products/kubernetes', 'https://www.rackspace.com/managed-kubernetes', 'https://diginomica.com/kubernetes-and-misconception-multi-cloud-portability']
+		]
+		
+	if(verbose >= 2): print(url_mat)
+	if(verbose >= 1): print_url_list_lengths(url_mat)
 
 # ––––––––––––––––––––––––––––––––––––––––––––––––––– FILE OUTPUT ––––––––––––––––––––––––––––––––––––––––––––––––––– #
 

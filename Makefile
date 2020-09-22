@@ -1,11 +1,12 @@
 temp?=False
-search?=False
+multi?=False
 dupe?=False
 date?=False
+lang?=False
 verbose?=1
 
 run:
-	python3 google_search_scraper.py $(temp) $(search) $(dupe) $(date) $(verbose)
+	python3 google_search_scraper.py $(temp) $(multi) $(dupe) $(date) $(lang) $(verbose)
 
 clean:
-	echo "No cleaning operation."
+	rm scraper_results.csv
